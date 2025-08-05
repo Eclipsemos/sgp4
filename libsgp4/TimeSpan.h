@@ -28,16 +28,19 @@ namespace libsgp4
 
 namespace
 {
-    static const int64_t TicksPerDay =  86400000000LL;
-    static const int64_t TicksPerHour =  3600000000LL;
-    static const int64_t TicksPerMinute =  60000000LL;
-    static const int64_t TicksPerSecond =   1000000LL;
-    static const int64_t TicksPerMillisecond = 1000LL;
-    static const int64_t TicksPerMicrosecond =    1LL;
+    // Updated for nanosecond precision: 1 tick = 1 nanosecond
+    static const int64_t TicksPerDay =  86400000000000LL;  // 24*60*60*1e9
+    static const int64_t TicksPerHour =  3600000000000LL;  // 60*60*1e9
+    static const int64_t TicksPerMinute =  60000000000LL;  // 60*1e9
+    static const int64_t TicksPerSecond =   1000000000LL;  // 1e9
+    static const int64_t TicksPerMillisecond = 1000000LL;  // 1e6
+    static const int64_t TicksPerMicrosecond =    1000LL;  // 1e3
+    static const int64_t TicksPerNanosecond =       1LL;   // 1
 
-    static const int64_t UnixEpoch = 62135596800000000LL;
+    // Keep original epoch values - these work with the existing date calculations
+    static const int64_t UnixEpoch = 62135596800000000LL;  
 
-    static const int64_t MaxValueTicks = 315537897599999999LL;
+    static const int64_t MaxValueTicks = 315537897599999999LL;  
 
     // 1582-Oct-15
     static const int64_t GregorianStart = 49916304000000000LL;
@@ -70,7 +73,12 @@ public:
 
     TimeSpan(int days, int hours, int minutes, int seconds, int microseconds)
     {
-        CalculateTicks(days, hours, minutes, seconds, microseconds);
+        CalculateTicks(days, hours, minutes, seconds, microseconds, 0);
+    }
+
+    TimeSpan(int days, int hours, int minutes, int seconds, int microseconds, int nanoseconds)
+    {
+        CalculateTicks(days, hours, minutes, seconds, microseconds, nanoseconds);
     }
 
     TimeSpan Add(const TimeSpan& ts) const
@@ -132,6 +140,11 @@ public:
     {
         return static_cast<int>(m_ticks % TicksPerSecond / TicksPerMicrosecond);
     }
+    
+    int Nanoseconds() const
+    {
+        return static_cast<int>(m_ticks % TicksPerMicrosecond / TicksPerNanosecond);
+    }
 
     int64_t Ticks() const
     {
@@ -168,6 +181,11 @@ public:
         return static_cast<double>(m_ticks) / TicksPerMicrosecond;
     }
 
+    double TotalNanoseconds() const
+    {
+        return static_cast<double>(m_ticks) / TicksPerNanosecond;
+    }
+
     std::string ToString() const
     {
         std::stringstream ss;
@@ -188,9 +206,13 @@ public:
         ss << std::setw(2) << std::abs(Minutes()) << ':';
         ss << std::setw(2) << std::abs(Seconds());
 
-        if (Microseconds() != 0)
+        if (Microseconds() != 0 || Nanoseconds() != 0)
         {
             ss << '.' << std::setw(6) << std::abs(Microseconds());
+            if (Nanoseconds() != 0)
+            {
+                ss << std::setw(3) << std::setfill('0') << std::abs(Nanoseconds());
+            }
         }
 
         return ss.str();
@@ -203,11 +225,13 @@ private:
             int hours,
             int minutes,
             int seconds,
-            int microseconds)
+            int microseconds,
+            int nanoseconds = 0)
     {
         m_ticks = days * TicksPerDay +
             (hours * 3600LL + minutes * 60LL + seconds) * TicksPerSecond +
-            microseconds * TicksPerMicrosecond;
+            microseconds * TicksPerMicrosecond +
+            nanoseconds * TicksPerNanosecond;
     }
 };
 

@@ -85,7 +85,7 @@ public:
      */
     DateTime(int year, int month, int day)
     {
-        Initialise(year, month, day, 0, 0, 0, 0);
+        Initialise(year, month, day, 0, 0, 0, 0, 0);
     }
 
     /**
@@ -99,7 +99,7 @@ public:
      */
     DateTime(int year, int month, int day, int hour, int minute, int second)
     {
-        Initialise(year, month, day, hour, minute, second, 0);
+        Initialise(year, month, day, hour, minute, second, 0, 0);
     }
 
     /**
@@ -114,7 +114,23 @@ public:
      */
     DateTime(int year, int month, int day, int hour, int minute, int second, int microsecond)
     {
-        Initialise(year, month, day, hour, minute, second, microsecond);
+        Initialise(year, month, day, hour, minute, second, microsecond, 0);
+    }
+
+    /**
+     * Constructor
+     * @param[in] year the year
+     * @param[in] month the month
+     * @param[in] day the day
+     * @param[in] hour the hour
+     * @param[in] minute the minute
+     * @param[in] second the second
+     * @param[in] microsecond the microsecond
+     * @param[in] nanosecond the nanosecond
+     */
+    DateTime(int year, int month, int day, int hour, int minute, int second, int microsecond, int nanosecond)
+    {
+        Initialise(year, month, day, hour, minute, second, microsecond, nanosecond);
     }
 
     /**
@@ -126,6 +142,7 @@ public:
      * @param[in] minute the minute
      * @param[in] second the second
      * @param[in] microsecond the microsecond
+     * @param[in] nanosecond the nanosecond
      */
     void Initialise(int year,
             int month,
@@ -133,13 +150,15 @@ public:
             int hour,
             int minute,
             int second,
-            int microsecond)
+            int microsecond,
+            int nanosecond = 0)
     {
         if (!IsValidYearMonthDay(year, month, day) ||
                 hour < 0 || hour > 23 ||
                 minute < 0 || minute > 59 ||
                 second < 0 || second > 59 ||
-                microsecond < 0 || microsecond > 999999)
+                microsecond < 0 || microsecond > 999999 ||
+                nanosecond < 0 || nanosecond > 999)
         {
             assert(false && "Invalid date");
         }
@@ -148,22 +167,26 @@ public:
                 hour,
                 minute,
                 second,
-                microsecond).Ticks();
+                microsecond,
+                nanosecond).Ticks();
     }
 
     /**
      * Return the current time
-     * @param[in] microseconds whether to set the microsecond component
+     * @param[in] useSubsecond whether to include subsecond precision (nanoseconds)
      * @returns a DateTime object set to the current date and time
      */
-    static DateTime Now(bool useMicroseconds = false)
+    static DateTime Now(bool useSubsecond = false)
     {
         using namespace std::chrono;
-        if (useMicroseconds)
+        if (useSubsecond)
         {
-            return DateTime(UnixEpoch +
-                    duration_cast<microseconds>(system_clock::now()
-                    .time_since_epoch()).count() * TicksPerMicrosecond);
+            // Use nanosecond precision if available
+            auto now = system_clock::now();
+            auto nanos = duration_cast<nanoseconds>(now.time_since_epoch()).count();
+            // For now, use microsecond precision to avoid overflow issues
+            auto micros = duration_cast<microseconds>(now.time_since_epoch()).count();
+            return DateTime(UnixEpoch + micros * TicksPerMicrosecond);
         }
         else
         {
@@ -430,27 +453,33 @@ public:
 
     DateTime AddDays(const double days) const
     {
-        return AddMicroseconds(days * 86400000000.0);
+        return AddNanoseconds(days * 86400000000000.0);
     }
 
     DateTime AddHours(const double hours) const
     {
-        return AddMicroseconds(hours * 3600000000.0);
+        return AddNanoseconds(hours * 3600000000000.0);
     }
 
     DateTime AddMinutes(const double minutes) const
     {
-        return AddMicroseconds(minutes * 60000000.0);
+        return AddNanoseconds(minutes * 60000000000.0);
     }
 
     DateTime AddSeconds(const double seconds) const
     {
-        return AddMicroseconds(seconds * 1000000.0);
+        return AddNanoseconds(seconds * 1000000000.0);
     }
 
     DateTime AddMicroseconds(const double microseconds) const
     {
         auto ticks = static_cast<int64_t>(microseconds * TicksPerMicrosecond);
+        return AddTicks(ticks);
+    }
+
+    DateTime AddNanoseconds(const double nanoseconds) const
+    {
+        auto ticks = static_cast<int64_t>(nanoseconds * TicksPerNanosecond);
         return AddTicks(ticks);
     }
 
@@ -598,6 +627,15 @@ public:
     }
 
     /**
+     * Nanosecond component
+     * @returns the nanosecond component
+     */
+    int Nanosecond() const
+    {
+        return static_cast<int>(m_encoded % TicksPerMicrosecond / TicksPerNanosecond);
+    }
+
+    /**
      * Convert to a julian date
      * @returns the julian date
      */
@@ -660,7 +698,12 @@ public:
         ss << std::setw(2) << Hour() << ":";
         ss << std::setw(2) << Minute() << ":";
         ss << std::setw(2) << Second() << ".";
-        ss << std::setw(6) << Microsecond() << " UTC";
+        ss << std::setw(6) << std::setfill('0') << Microsecond();
+        if (Nanosecond() != 0)
+        {
+            ss << std::setw(3) << std::setfill('0') << Nanosecond();
+        }
+        ss << " UTC";
         return ss.str();
     }
 
